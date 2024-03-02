@@ -4,36 +4,35 @@ using CsvHelper;
 using System.Configuration;
 using Npgsql;
 using TEC_Dev_Test_Project;
+using NpgsqlTypes;
 
 internal class Program
 {
     static async Task Main(string[] args)
     {
-        var result = new List<TWCapacity>();
-
-        for (int i = 1; i < 2; i++)
+        for (int i = 1; i < 4; i++)
         {
             var date = DateTime.Today.AddDays(-i);
 
             var url = GenerateUrl(date);
 
-            result.AddRange(GetCSV(url));
-        }
+            var res = GetCSV(url);
 
-        InsertAll(result);
+            InsertAll(res, date);
+        }
     }
 
-    static async void InsertAll(IEnumerable<TWCapacity> items) // does this need to be async?
+    static async void InsertAll(IEnumerable<TWCapacity> items, DateTime date) // does this need to be async?
     {
+        string connectionString = ConfigurationManager.ConnectionStrings["ConnectionString_Postgres"].ConnectionString;
+        NpgsqlConnection connection = new NpgsqlConnection(connectionString);
+
         try
         {
-            string connectionString = ConfigurationManager.ConnectionStrings["ConnectionString_Postgres"].ConnectionString;
-            NpgsqlConnection connection = new NpgsqlConnection(connectionString);
-
             connection.Open();
 
             using var importer = connection.BeginBinaryImport(
-                    "COPY tw_capacity (loc, loc_zn, loc_name, loc_purp_desc, loc_qti, flow_ind, dc, opc, tsq, oac, it, auth_overrun_ind, nom_cap_exceed_ind, all_qty_avail, qty_reason, date_inserted) " +
+                    "COPY tw_capacity (loc, loc_zn, loc_name, loc_purp_desc, loc_qti, flow_ind, dc, opc, tsq, oac, it, auth_overrun_ind, nom_cap_exceed_ind, all_qty_avail, qty_reason, date, date_inserted) " +
                     "FROM STDIN (FORMAT binary)");
 
             foreach (var item in items)
@@ -49,11 +48,12 @@ internal class Program
                 await importer.WriteAsync(item.OPC);
                 await importer.WriteAsync(item.TSQ);
                 await importer.WriteAsync(item.OAC);
-                await importer.WriteAsync(item.IT);
-                await importer.WriteAsync(item.AuthOverrunInd);
-                await importer.WriteAsync(item.NomCapExceedInd);
-                await importer.WriteAsync(item.AllQtyAvail);
+                await importer.WriteAsync(item.IT == 'Y' ? true : false);
+                await importer.WriteAsync(item.AuthOverrunInd == 'Y' ? true : false);
+                await importer.WriteAsync(item.NomCapExceedInd == 'Y' ? true : false);
+                await importer.WriteAsync(item.AllQtyAvail == 'Y' ? true : false);
                 await importer.WriteAsync(item.QtyReason);
+                await importer.WriteAsync(date.Date, NpgsqlDbType.Date);
                 await importer.WriteAsync(DateTime.Now);
             }
 
@@ -62,6 +62,10 @@ internal class Program
         catch (Exception ex)
         {
             Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            connection.Close();
         }
     }
 
@@ -81,7 +85,7 @@ internal class Program
 
     static List<TWCapacity> GetCSV(string url)
     {
-        var result = new List<TWCapacity>();
+        var records = new List<TWCapacity>();
 
         HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
         HttpWebResponse response = (HttpWebResponse)request.GetResponse();
@@ -91,24 +95,35 @@ internal class Program
         {
             csvReader.Context.RegisterClassMap<TWCapacityMap>();
 
-            while (csvReader.Read())
+            //while (csvReader.Read())
+            //{
+            //    // TODO: currently the code will skip any records that it cannot parse - maybe it should skip the whole batch?
+            //    try
+            //    {
+            //        var record = csvReader.GetRecord<TWCapacity>();
+
+            //        result.Add(record);
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        Console.WriteLine($"Error: {ex.Message}");
+            //    }
+            //}
+
+            try
             {
-                // TODO: currently the code will skip any records that it cannot parse - maybe it should skip the whole batch?
-                try
-                {
-                    var record = csvReader.GetRecord<TWCapacity>();
+                records = (List<TWCapacity>)csvReader.GetRecords<TWCapacity>().ToList();
 
-                    result.Add(record);
-
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error: {ex.Message}");
-                }
+                //result.AddRange(records);
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+
         }
 
-        return result;
+        return records;
     }
 
     static bool Validate(TWCapacity twCapacity)
