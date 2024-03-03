@@ -119,7 +119,11 @@ internal class Program
             if (item.LocPurpDesc.Length > 2
                 || item.LocQTI.Length > 3
                 || item.FlowInd.Length > 1)
+            {
+                Console.WriteLine($"Error: Validation error for Loc {item.Loc}, {item.Date}");
+
                 return false;
+            }
         }
 
         return true;
