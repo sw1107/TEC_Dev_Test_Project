@@ -23,7 +23,8 @@ internal class Program
             allRecords.AddRange(GetCSV(url, date));
         }
 
-        InsertMany(allRecords);
+        if (Validate(allRecords))
+            InsertMany(allRecords);
     }
 
     static void InsertMany(IEnumerable<TWCapacity> items) 
@@ -77,7 +78,7 @@ internal class Program
     {
         // Final cycle
         var url = $"https://twtransfer.energytransfer.com/ipost/capacity/operationally-available?" +
-                  $"f=csv&extension=csv&asset=TW&gasDay={date.Month}%2F{date.Day}%2F{date.Year}&cycle=3&searchType=NOM&searchString=&locType=ALL&locZone=ALL";
+                  $"f=csv&extension=csv&asset=TW&gasDay={date.Month}%2F{date.Day}%2F{date.Year}&cycle=5&searchType=NOM&searchString=&locType=ALL&locZone=ALL";
 
         return url;
     }
@@ -111,8 +112,16 @@ internal class Program
         return records;
     }
 
-    static bool Validate(TWCapacity twCapacity)
+    static bool Validate(List<TWCapacity> items)
     {
+        foreach (var item in items)
+        {
+            if (item.LocPurpDesc.Length > 2
+                || item.LocQTI.Length > 3
+                || item.FlowInd.Length > 1)
+                return false;
+        }
+
         return true;
     }
 }
